@@ -1,0 +1,2 @@
+0 HUMAN
+1 Human with a Cat
