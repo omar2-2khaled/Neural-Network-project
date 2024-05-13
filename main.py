@@ -1,111 +1,109 @@
 import numpy as np
 import os
-from PIL import Image
+from PIL import Image, ImageTk  # Import ImageTk for displaying images in tkinter
 import tkinter as tk
-#GUI
 from tkinter import filedialog
+from sklearn.model_selection import train_test_split
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
 
-# Set the image size and channels
+# Set image size and channels
 CHANNELS = 3
-IMG_SIZE = 50
+IMG_SIZE = 224  # Change the image size to 224x224
 
-# Define the image paths and labels
+# Define data paths and labels
 CAT_PATH = "Cat/"
 HUMAN_PATH = "Human/"
 CAT_LABEL = 0
 HUMAN_LABEL = 1
 
-# Read and preprocess the image data
-data = []
-labels = []
+# Function to load, preprocess, and return data and labels
+def load_data(path, label):
+    data = []
+    for file in os.listdir(path):
+        if file.endswith(".jpg"):
+            img_path = os.path.join(path, file)
+            img = Image.open(img_path).convert('RGB')
+            img = img.resize((IMG_SIZE, IMG_SIZE))  # Resize images to 224x224
+            img_data = np.array(img) / 255.0  # Normalize
+            data.append((img_data, img))  # Store both image data and PIL image object
+    return np.array([item[0] for item in data]), np.full((len(data),), label), [item[1] for item in data]
 
-# Read the cat images
-for file in os.listdir(CAT_PATH):
-    if file.endswith(".jpg"or".jpeg"):
-        img_path = os.path.join(CAT_PATH, file)
-        img = Image.open(img_path).convert('RGB')
-        img = img.resize((IMG_SIZE, IMG_SIZE))
-        data.append(np.array(img).flatten())
-        labels.append(CAT_LABEL)
+# Load cat and human data
+cat_data, cat_labels, cat_images = load_data(CAT_PATH, CAT_LABEL)
+human_data, human_labels, human_images = load_data(HUMAN_PATH, HUMAN_LABEL)
 
-# Read the human images
-for file in os.listdir(HUMAN_PATH):
-    if file.endswith(".jpg"):
-        img_path = os.path.join(HUMAN_PATH, file)
-        img = Image.open(img_path).convert('RGB')
-        img = img.resize((IMG_SIZE, IMG_SIZE))
-        data.append(np.array(img).flatten())
-        labels.append(HUMAN_LABEL)
+# Combine data and labels
+data = np.concatenate((cat_data, human_data), axis=0)
+labels = np.concatenate((cat_labels, human_labels), axis=0)
+images = cat_images + human_images  # Combine image lists
 
-# Convert the data and labels to numpy arrays
-data = np.array(data)
-labels = np.array(labels)
+# Split data into training and validation sets
+train_data, val_data, train_labels, val_labels, train_images, val_images = train_test_split(data, labels, images, test_size=0.2, random_state=42)
 
-# Normalize the data
-data = data / 255.0
+# Reshape data for CNN (add channel dimension)
+train_data = train_data.reshape(train_data.shape[0], IMG_SIZE, IMG_SIZE, CHANNELS)
+val_data = val_data.reshape(val_data.shape[0], IMG_SIZE, IMG_SIZE, CHANNELS)
 
-# Define the perceptron model
-class Perceptron:
-    def __init__(self, input_size, lr=0.01, epochs=100):
-        self.weights = np.zeros(input_size)
-        self.bias = 0
-        self.lr = lr
-        self.epochs = epochs
+# Define the CNN model
+model = Sequential()
 
-    def activation_fn(self, x):
-        return 1 if x >= 0 else 0
+# First convolutional layer
+model.add(Conv2D(32, (3, 3), activation='relu', input_shape=(IMG_SIZE, IMG_SIZE, CHANNELS)))
+model.add(MaxPooling2D((2, 2)))
 
-    # Return Y in the Equation
-    def predict(self, x):
-        z = np.dot(x, self.weights) + self.bias#NET
-        a = self.activation_fn(z)
-        return a
+# Flatten the data for feeding to the fully connected layers
+model.add(Flatten())
 
-    def train(self, X, y):
-        for epoch in range(self.epochs):
-            for i in range(y.shape[0]):
-                x = X[i]
+# Fully connected layer 1
+model.add(Dense(64, activation='relu'))
 
-                y_hat = self.predict(x)
-                error = y[i] - y_hat #Error = T-Y
-                # NewWeight = OldWeight +(delta *error * X)
-                self.weights += self.lr * error * x
-                self.bias += self.lr * error
+# Output layer with sigmoid activation for binary classification
+model.add(Dense(1, activation='sigmoid'))
 
+# Compile the model
+model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
 
-# Create the perceptron model object and train it on the data
-perceptron = Perceptron(input_size=data.shape[1])
-perceptron.train(data, labels)
+# Train the model
+model.fit(train_data, train_labels, epochs=10, batch_size=32, validation_data=(val_data, val_labels))
 
-# Create a GUI for the model
-root = tk.Tk()
-root.title("Cat or Human?")
-root.geometry("400x200")
-
-# Define the function for predicting the image
+# Function to predict on a new image
 def predict_image():
-    file_path = filedialog.askopenfilename()
+    file_path = filedialog.askopenfilename()  # Open file dialog to select image
     if file_path:
         img = Image.open(file_path).convert('RGB')
-        img = img.resize((IMG_SIZE, IMG_SIZE))
-        img_data = np.array(img).flatten() / 255.0
-        prediction = perceptron.predict(img_data)
-        if prediction == CAT_LABEL:
-            result_label.config(text="The image is of a cat.")
+        img = img.resize((IMG_SIZE, IMG_SIZE))  # Resize image to 224x224
+        img_data = np.expand_dims(np.array(img) / 255.0, axis=0)  # Add batch dimension
+        prediction = model.predict(img_data)[0][0]
+        if prediction > 0.5:  # Threshold for human probability
+            result_label.config(text="The image is of a human.", fg="blue")
         else:
-            result_label.config(text="The image is of a human.")
-    else:
-        result_label.config(text="Please choose an image.")
+            result_label.config(text="The image is of a cat.", fg="green")
+        # Convert PIL image to Tkinter PhotoImage and display it
+        img_tk = ImageTk.PhotoImage(img)
+        img_label.config(image=img_tk)
+        img_label.image = img_tk  # Keep a reference to avoid garbage collection
 
-# Create a button for selecting an image
-select_button = tk.Button(root, text="Select Image", command=predict_image)
+# Create the GUI
+root = tk.Tk()
+root.title("Cat or Human?")
+root.geometry("600x400")  # Adjusted size for better display
+
+# Add a frame for better organization
+frame = tk.Frame(root, bg="white")
+frame.pack(fill=tk.BOTH, expand=True)
+
+# Label to display the result
+result_label = tk.Label(frame, text="", font=("Arial", 20, "bold"))
+result_label.pack(pady=20)
+
+# Label to display the image
+img_label = tk.Label(frame)
+img_label.pack(pady=20)
+
+# Button to select an image
+select_button = tk.Button(frame, text="Select Image", command=predict_image)
 select_button.pack(pady=20)
 
-# Create a label for displaying the result
-
-result_label = tk.Label(root, text="")
-result_label.config(font=("Arial", 20, "bold"))
-
-result_label.pack()
-
+# Run the GUI main loop
 root.mainloop()
