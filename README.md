@@ -1,16 +1,15 @@
-# Cat or Human Image Classifier
+# Cat or Human Classification
 
-This is a simple image classification application that uses a Perceptron model to classify images as either a cat or a human. The application also includes a GUI for user interaction.
-
+This project implements a Convolutional Neural Network (CNN) model to classify images as either cats or humans. It utilizes the TensorFlow library with Keras API for building and training the CNN model, and tkinter for creating a simple GUI to interact with the model.This project is developed as part of a neural network course in college.
 ## Dependencies
 
 The application requires the following Python libraries:
 
-- numpy
-- os
+- Python 3.x
+- TensorFlow
 - PIL (Python Imaging Library)
 - tkinter
-
+- scikit-learn (for train-test split)
 ## How it Works
 
 The application reads all JPEG images from the specified directories, resizes them to the specified size, and converts them to numpy arrays. The arrays are flattened and normalized to a range of 0-1. Corresponding labels are created for each image.
